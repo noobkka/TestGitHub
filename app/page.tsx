@@ -1,6 +1,7 @@
 import CalendarApp from "./ui/calendar-app";
-import { events } from "@/data/events";
+import { getCalendarEvents } from "@/lib/calendar";
 
-export default function Home() {
-  return <CalendarApp events={events} />;
+export default async function Home() {
+  const calendar=await getCalendarEvents();
+  return <CalendarApp events={calendar.events} syncedAt={calendar.syncedAt} usingFallback={calendar.usingFallback} />;
 }

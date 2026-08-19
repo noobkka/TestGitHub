@@ -1,130 +1,691 @@
 "use client";
-
 import { useEffect, useMemo, useState } from "react";
-import type { CalendarEvent, EventCategory } from "@/data/events";
-import { categoryMeta } from "@/data/events";
+import type { CalendarEvent, EventCategory, GameId } from "@/data/events";
+import { categoryMeta, gameMeta } from "@/data/events";
 
-const categories: Array<EventCategory | "all"> = ["all", "warp", "event", "bonus", "reset"];
-const serverZones = { Asia: "Asia/Shanghai", Europe: "Europe/Berlin", America: "America/New_York" } as const;
-type Server = keyof typeof serverZones;
+type Language = "en" | "zh";
+type Server = "Asia" | "Europe" | "America";
+const categories: EventCategory[] = ["warp", "event", "bonus", "reset"];
+const games: GameId[] = [
+  "starrail",
+  "zenless",
+  "endfield",
+  "wuthering",
+  "nte",
+  "epic",
+];
+const serverZones: Record<Server, string> = {
+  Asia: "Asia/Shanghai",
+  Europe: "Europe/Berlin",
+  America: "America/New_York",
+};
+const copy = {
+  en: {
+    schedule: "Schedule",
+    about: "About",
+    server: "Server",
+    language: "Language",
+    hero1: "Never miss",
+    hero2: "the next departure.",
+    intro:
+      "Events, warps, resets, and rewards — translated to your time, all in one place.",
+    active: "Active now",
+    coming: "Coming up",
+    serverTime: "server time",
+    journey: "YOUR JOURNEY",
+    eventSchedule: "Event schedule",
+    agenda: "Agenda",
+    calendar: "Timeline",
+    all: "All events",
+    previewTitle: "Official Version 4.4 schedule",
+    previewText:
+      "In-game event dates are verified against official HoYoLAB notices. The current dataset follows the Asia server schedule.",
+    happening: "Happening now",
+    events: "events",
+    next: "Next departures",
+    startsIn: "Starts in",
+    official: "Official source",
+    preview: "Schedule preview",
+    ended: "Ended",
+    left: "left",
+    footer:
+      "A fan-made schedule for Trailblazers. Not affiliated with HoYoverse.",
+    hoyolab: "Official HoYoLAB",
+    month: "Aug 17 — Sep 16",
+    weekdays: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+    servers: { Asia: "Asia", Europe: "Europe", America: "America" },
+    cats: {
+      warp: "Warp",
+      event: "In-game event",
+      bonus: "Reward",
+      reset: "Endgame",
+      update: "Update",
+    },
+  },
+  zh: {
+    schedule: "日程",
+    about: "关于",
+    server: "服务器",
+    language: "语言",
+    hero1: "不错过每一次",
+    hero2: "星穹旅程。",
+    intro: "活动、跃迁、重置与奖励——自动转换为你的时间，一站掌握。",
+    active: "正在进行",
+    coming: "即将开始",
+    serverTime: "服务器时间",
+    journey: "你的旅程",
+    eventSchedule: "活动日程",
+    agenda: "日程",
+    calendar: "时间轴",
+    all: "全部活动",
+    previewTitle: "4.4 版本官方日程",
+    previewText:
+      "游戏内活动日期均已对照 HoYoLAB 官方公告核实，当前数据以亚洲服务器日程为准。",
+    happening: "正在进行",
+    events: "项活动",
+    next: "即将启程",
+    startsIn: "距开始",
+    official: "官方来源",
+    preview: "日程预览",
+    ended: "已结束",
+    left: "剩余",
+    footer: "为开拓者制作的非官方日程，与 HoYoverse 无关联。",
+    hoyolab: "官方 HoYoLAB",
+    month: "8 月 17 日 — 9 月 16 日",
+    weekdays: ["周一", "周二", "周三", "周四", "周五", "周六", "周日"],
+    servers: { Asia: "亚洲", Europe: "欧洲", America: "美洲" },
+    cats: {
+      warp: "卡池",
+      event: "游戏活动",
+      bonus: "福利奖励",
+      reset: "高难玩法",
+      update: "更新",
+    },
+  },
+} as const;
 
-function formatDate(value: string, zone?: string) {
-  return new Intl.DateTimeFormat("en", {
-    month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: zone,
+function formatDate(value: string, zone: string, lang: Language) {
+  return new Intl.DateTimeFormat(lang === "zh" ? "zh-CN" : "en", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: lang === "en",
+    timeZone: zone,
   }).format(new Date(value));
 }
-
-function remaining(end: string, now: number) {
-  const ms = new Date(end).getTime() - now;
-  if (ms <= 0) return "Ended";
-  const days = Math.floor(ms / 86400000);
-  const hours = Math.floor((ms % 86400000) / 3600000);
-  return days ? `${days}d ${hours}h left` : `${hours}h left`;
+function remaining(end: string, now: number, lang: Language) {
+  const ms = +new Date(end) - now;
+  if (ms <= 0) return copy[lang].ended;
+  const d = Math.floor(ms / 86400000),
+    h = Math.floor((ms % 86400000) / 3600000);
+  return lang === "zh"
+    ? d
+      ? `${d}天 ${h}小时${copy.zh.left}`
+      : `${h}小时${copy.zh.left}`
+    : d
+      ? `${d}d ${h}h left`
+      : `${h}h left`;
 }
-
-function EventCard({ event, now, zone }: { event: CalendarEvent; now: number; zone: string }) {
-  const meta = categoryMeta[event.category];
+function localEvent(e: CalendarEvent, lang: Language) {
+  return {
+    title: lang === "zh" ? e.titleZh || e.title : e.title,
+    shortTitle: lang === "zh" ? e.shortTitleZh || e.shortTitle : e.shortTitle,
+    description:
+      lang === "zh" ? e.descriptionZh || e.description : e.description,
+    reward: lang === "zh" ? e.rewardZh || e.reward : e.reward,
+  };
+}
+function EventCard({
+  event,
+  now,
+  zone,
+  lang,
+}: {
+  event: CalendarEvent;
+  now: number;
+  zone: string;
+  lang: Language;
+}) {
+  const t = copy[lang],
+    e = localEvent(event, lang),
+    meta = categoryMeta[event.category];
   return (
     <article className={`event-card category-${event.category}`}>
       <div className="event-card-top">
-        <span className="event-kind"><i>{meta.icon}</i>{meta.label}</span>
-        <span className="remaining">{remaining(event.endsAt, now)}</span>
+        <span className="event-kind">
+          <i>{meta.icon}</i>
+          {t.cats[event.category]}
+        </span>
+        <span className="remaining">{remaining(event.endsAt, now, lang)}</span>
       </div>
-      <h3>{event.title}</h3>
-      <p>{event.description}</p>
-      {event.reward && <div className="reward"><span>✦</span>{event.reward}</div>}
+      <h3>{e.title}</h3>
+      <p>{e.description}</p>
+      {e.reward && (
+        <div className="reward">
+          <span>✦</span>
+          {e.reward}
+        </div>
+      )}
       <div className="event-footer">
-        <span>{formatDate(event.endsAt, zone)}</span>
-        <span className={event.verified ? "verified" : "preview"}>{event.verified ? "Official source" : "Schedule preview"}</span>
+        <span>{formatDate(event.endsAt, zone, lang)}</span>
+        <span className={event.verified ? "verified" : "preview"}>
+          {event.verified
+            ? t.official
+            : lang === "zh"
+              ? "自动同步"
+              : "Auto-synced"}
+        </span>
       </div>
     </article>
   );
 }
 
-export default function CalendarApp({ events }: { events: CalendarEvent[] }) {
-  const [now, setNow] = useState(new Date("2026-08-19T12:00:00+08:00").getTime());
-  const [category, setCategory] = useState<EventCategory | "all">("all");
-  const [server, setServer] = useState<Server>("Asia");
-  const [view, setView] = useState<"agenda" | "calendar">("agenda");
-
+export default function CalendarApp({
+  events,
+  syncedAt,
+  usingFallback,
+}: {
+  events: CalendarEvent[];
+  syncedAt: string;
+  usingFallback: boolean;
+}) {
+  const [now, setNow] = useState(+new Date("2026-08-19T12:00:00+08:00")),
+    [disabledCategories, setDisabledCategories] = useState<Set<EventCategory>>(
+      () => new Set(),
+    ),
+    [selectedGames, setSelectedGames] = useState<Set<GameId>>(
+      () => new Set(games),
+    ),
+    [server, setServer] = useState<Server>("Asia"),
+    [view, setView] = useState<"agenda" | "calendar">("calendar"),
+    [lang, setLang] = useState<Language>("zh");
   useEffect(() => {
+    const saved = localStorage.getItem("astral-language-v2");
+    if (saved === "en" || saved === "zh") setLang(saved);
     setNow(Date.now());
-    const timer = window.setInterval(() => setNow(Date.now()), 60000);
-    return () => window.clearInterval(timer);
+    const timer = setInterval(() => setNow(Date.now()), 60000);
+    return () => clearInterval(timer);
   }, []);
-
-  const visible = useMemo(() => events
-    .filter((event) => category === "all" || event.category === category)
-    .filter((event) => new Date(event.endsAt).getTime() > now)
-    .sort((a, b) => +new Date(a.endsAt) - +new Date(b.endsAt)), [events, category, now]);
-  const active = visible.filter((event) => +new Date(event.startsAt) <= now);
-  const upcoming = visible.filter((event) => +new Date(event.startsAt) > now);
-  const zone = serverZones[server];
-
+  useEffect(() => {
+    document.documentElement.lang = lang === "zh" ? "zh-CN" : "en";
+    localStorage.setItem("astral-language-v2", lang);
+  }, [lang]);
+  const visible = useMemo(
+      () =>
+        events
+          .filter(
+            (e) =>
+              !disabledCategories.has(e.category) &&
+              selectedGames.has(e.game || "starrail") &&
+              +new Date(e.endsAt) > now,
+          )
+          .sort((a, b) => +new Date(a.endsAt) - +new Date(b.endsAt)),
+      [events, disabledCategories, selectedGames, now],
+    ),
+    active = visible.filter((e) => +new Date(e.startsAt) <= now),
+    upcoming = visible.filter((e) => +new Date(e.startsAt) > now),
+    zone = serverZones[server],
+    t = copy[lang];
+  const toggleCategory = (category: EventCategory) =>
+    setDisabledCategories((current) => {
+      const next = new Set(current);
+      if (next.has(category)) next.delete(category);
+      else next.add(category);
+      return next;
+    });
+  const toggleGame = (game: GameId) =>
+    setSelectedGames((current) => {
+      const next = new Set(current);
+      if (next.has(game)) next.delete(game);
+      else next.add(game);
+      return next;
+    });
   return (
     <main>
       <header className="site-header">
-        <a className="brand" href="#top" aria-label="Astral Calendar home">
-          <span className="brand-mark">✦</span><span>Astral <b>Calendar</b></span>
+        <a className="brand" href="#top">
+          <span className="brand-mark">✦</span>
+          <span>
+            Astral <b>Calendar</b>
+          </span>
         </a>
-        <nav aria-label="Main navigation">
-          <a className="active" href="#schedule">Schedule</a><a href="#about">About</a>
+        <nav>
+          <a className="active" href="#schedule">
+            {t.schedule}
+          </a>
+          <a href="#about">{t.about}</a>
         </nav>
-        <label className="server-picker">Server
-          <select value={server} onChange={(e) => setServer(e.target.value as Server)}>
-            {Object.keys(serverZones).map((name) => <option key={name}>{name}</option>)}
-          </select>
-        </label>
-      </header>
-
-      <section className="hero" id="top">
-        <div className="eyebrow"><span></span> HONKAI: STAR RAIL</div>
-        <h1>Never miss<br /><em>the next departure.</em></h1>
-        <p>Events, warps, resets, and rewards — translated to your time, all in one place.</p>
-        <div className="hero-stats">
-          <div><strong>{active.length}</strong><span>Active now</span></div>
-          <div><strong>{upcoming.length}</strong><span>Coming up</span></div>
-          <div><strong>{server}</strong><span>{formatDate(new Date(now).toISOString(), zone)} server time</span></div>
+        <div className="header-controls">
+          <label className="language-picker">
+            <span>{t.language}</span>
+            <button
+              onClick={() => setLang(lang === "en" ? "zh" : "en")}
+              aria-label={
+                lang === "en" ? "切换到简体中文" : "Switch to English"
+              }
+            >
+              {lang === "en" ? "简体中文" : "EN"}
+            </button>
+          </label>
+          <label className="server-picker">
+            {t.server}
+            <select
+              value={server}
+              onChange={(e) => setServer(e.target.value as Server)}
+            >
+              {(Object.keys(serverZones) as Server[]).map((s) => (
+                <option value={s} key={s}>
+                  {t.servers[s]}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
-        <div className="orbit orbit-one"></div><div className="orbit orbit-two"></div><div className="star star-one">✦</div><div className="star star-two">✧</div>
-      </section>
-
-      <section className="schedule" id="schedule">
-        <div className="section-heading">
-          <div><span className="section-kicker">YOUR JOURNEY</span><h2>Event schedule</h2></div>
-          <div className="view-toggle" aria-label="View">
-            <button className={view === "agenda" ? "selected" : ""} onClick={() => setView("agenda")}>☷ <span>Agenda</span></button>
-            <button className={view === "calendar" ? "selected" : ""} onClick={() => setView("calendar")}>▦ <span>Calendar</span></button>
+      </header>
+      <section className="hero" id="top">
+        <div className="eyebrow">
+          <span /> MULTI-GAME EVENT CALENDAR
+        </div>
+        <h1>
+          {lang === "zh" ? "一个时间轴，" : "One timeline,"}
+          <br />
+          <em>{lang === "zh" ? "看遍所有旅程。" : "every adventure."}</em>
+        </h1>
+        <p>
+          {lang === "zh"
+            ? "星铁、绝区零、终末地、鸣潮、异环与 Epic 免费游戏，集中在同一条时间轴。"
+            : "Five live-service games and Epic free games in one shared timeline."}
+        </p>
+        <div className="hero-stats">
+          <div>
+            <strong>{active.length}</strong>
+            <span>{t.active}</span>
+          </div>
+          <div>
+            <strong>{upcoming.length}</strong>
+            <span>{t.coming}</span>
+          </div>
+          <div>
+            <strong>{t.servers[server]}</strong>
+            <span>
+              {formatDate(new Date(now).toISOString(), zone, lang)}{" "}
+              {t.serverTime}
+            </span>
           </div>
         </div>
-        <div className="filters">
-          {categories.map((item) => <button key={item} className={category === item ? "selected" : ""} onClick={() => setCategory(item)}>{item === "all" ? "All events" : categoryMeta[item].label}</button>)}
+        <div className="orbit orbit-one" />
+        <div className="orbit orbit-two" />
+        <div className="star star-one">✦</div>
+        <div className="star star-two">✧</div>
+      </section>
+      <section className="schedule" id="schedule">
+        <div className="section-heading">
+          <div>
+            <span className="section-kicker">{t.journey}</span>
+            <h2>{t.eventSchedule}</h2>
+          </div>
+          <div className="view-toggle">
+            <button
+              className={view === "agenda" ? "selected" : ""}
+              onClick={() => setView("agenda")}
+            >
+              ☷ <span>{t.agenda}</span>
+            </button>
+            <button
+              className={view === "calendar" ? "selected" : ""}
+              onClick={() => setView("calendar")}
+            >
+              ▦ <span>{t.calendar}</span>
+            </button>
+          </div>
         </div>
-
-        <div className="notice"><span>i</span><p><strong>Preview schedule</strong> — event records marked “Schedule preview” demonstrate the calendar and should be replaced as new official notices are published.</p></div>
-
+        <div
+          className="game-filters"
+          aria-label={lang === "zh" ? "游戏筛选" : "Game filters"}
+        >
+          <button
+            className={selectedGames.size === games.length ? "selected" : ""}
+            aria-pressed={selectedGames.size === games.length}
+            onClick={() =>
+              setSelectedGames((current) =>
+                current.size === games.length ? new Set() : new Set(games),
+              )
+            }
+          >
+            {lang === "zh" ? "全部游戏" : "Select all"}
+          </button>
+          {games.map((game) => {
+            const selected = selectedGames.has(game);
+            return (
+              <button
+                key={game}
+                className={`game-${game} ${selected ? "selected" : ""}`}
+                aria-pressed={selected}
+                onClick={() => toggleGame(game)}
+              >
+                <img
+                  className="game-logo"
+                  src={gameMeta[game].logoUrl}
+                  alt=""
+                  referrerPolicy="no-referrer"
+                />
+                {lang === "zh" ? gameMeta[game].label : gameMeta[game].labelEn}
+              </button>
+            );
+          })}
+        </div>
+        <div
+          className="filters"
+          aria-label={lang === "zh" ? "活动类型筛选" : "Event type filters"}
+        >
+          {categories.map((c) => {
+            const enabled = !disabledCategories.has(c);
+            return (
+              <button
+                key={c}
+                className={enabled ? "selected" : ""}
+                aria-pressed={enabled}
+                onClick={() => toggleCategory(c)}
+              >
+                {t.cats[c]}
+              </button>
+            );
+          })}
+        </div>
+        <div className="notice">
+          <span>{usingFallback ? "!" : "↻"}</span>
+          <p>
+            <strong>
+              {usingFallback
+                ? lang === "zh"
+                  ? "正在使用备用数据"
+                  : "Using fallback data"
+                : lang === "zh"
+                  ? "每日自动同步"
+                  : "Daily automatic sync"}
+            </strong>{" "}
+            —{" "}
+            {usingFallback
+              ? lang === "zh"
+                ? "实时数据源暂时不可用，当前显示最近一次人工核实的日程。"
+                : "The live feed is unavailable; showing the latest hand-verified schedule."
+              : lang === "zh"
+                ? "活动、跃迁与高难玩法每天自动更新一次。"
+                : "Events, Warps, and challenges refresh automatically once per day."}{" "}
+            <small>
+              {lang === "zh" ? "同步于" : "Synced"}{" "}
+              {formatDate(syncedAt, zone, lang)}
+            </small>
+          </p>
+        </div>
         {view === "agenda" ? (
           <>
-            <div className="group-title"><h3>Happening now</h3><span>{active.length} events</span></div>
-            <div className="card-grid">{active.map((event) => <EventCard key={event.id} event={event} now={now} zone={zone} />)}</div>
-            <div className="group-title upcoming-title"><h3>Next departures</h3><span>{upcoming.length} events</span></div>
+            <div className="group-title">
+              <h3>{t.happening}</h3>
+              <span>
+                {active.length} {t.events}
+              </span>
+            </div>
+            <div className="card-grid">
+              {active.map((e) => (
+                <EventCard
+                  key={e.id}
+                  event={e}
+                  now={now}
+                  zone={zone}
+                  lang={lang}
+                />
+              ))}
+            </div>
+            <div className="group-title upcoming-title">
+              <h3>{t.next}</h3>
+              <span>
+                {upcoming.length} {t.events}
+              </span>
+            </div>
             <div className="timeline">
-              {upcoming.map((event) => <article className="timeline-item" key={event.id}>
-                <div className={`timeline-icon category-${event.category}`}>{categoryMeta[event.category].icon}</div>
-                <div className="timeline-copy"><span>{formatDate(event.startsAt, zone)}</span><h3>{event.title}</h3><p>{event.description}</p></div>
-                <div className="timeline-meta"><span>{categoryMeta[event.category].label}</span><strong>Starts in {remaining(event.startsAt, now).replace(" left", "")}</strong></div>
-              </article>)}
+              {upcoming.map((event) => {
+                const e = localEvent(event, lang);
+                return (
+                  <article className="timeline-item" key={event.id}>
+                    <div className={`timeline-icon category-${event.category}`}>
+                      {categoryMeta[event.category].icon}
+                    </div>
+                    <div className="timeline-copy">
+                      <span>{formatDate(event.startsAt, zone, lang)}</span>
+                      <h3>{e.title}</h3>
+                      <p>{e.description}</p>
+                    </div>
+                    <div className="timeline-meta">
+                      <span>{t.cats[event.category]}</span>
+                      <strong>
+                        {t.startsIn}{" "}
+                        {remaining(event.startsAt, now, lang).replace(
+                          lang === "zh" ? "剩余" : " left",
+                          "",
+                        )}
+                      </strong>
+                    </div>
+                  </article>
+                );
+              })}
             </div>
           </>
-        ) : <MonthView events={visible} zone={zone} />}
+        ) : (
+          <HorizontalTimeline events={visible} zone={zone} lang={lang} />
+        )}
       </section>
-
-      <footer id="about"><div className="brand"><span className="brand-mark">✦</span><span>Astral <b>Calendar</b></span></div><p>A fan-made schedule for Trailblazers. Not affiliated with HoYoverse.</p><a href="https://www.hoyolab.com/official/8/events" target="_blank" rel="noreferrer">Official HoYoLAB ↗</a></footer>
+      <footer id="about">
+        <div className="brand">
+          <span className="brand-mark">✦</span>
+          <span>
+            Astral <b>Calendar</b>
+          </span>
+        </div>
+        <p>{t.footer}</p>
+        <a
+          href="https://www.hoyolab.com/official/8/events"
+          target="_blank"
+          rel="noreferrer"
+        >
+          {t.hoyolab} ↗
+        </a>
+      </footer>
     </main>
   );
 }
 
-function MonthView({ events, zone }: { events: CalendarEvent[]; zone: string }) {
-  const days = Array.from({ length: 35 }, (_, i) => i + 3);
-  return <div className="month-view"><div className="month-title"><button aria-label="Previous month">‹</button><h3>August 2026</h3><button aria-label="Next month">›</button></div><div className="weekdays">{["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map(d => <span key={d}>{d}</span>)}</div><div className="month-grid">{days.map((day) => { const date = day > 31 ? day - 31 : day; const inMonth = day <= 31; const dayEvents = inMonth ? events.filter(e => new Date(e.startsAt).getUTCDate() === date || (new Date(e.startsAt).getUTCDate() < date && new Date(e.endsAt).getUTCDate() >= date)) : []; return <div className={`${!inMonth ? "muted-day" : ""} ${date === 19 && inMonth ? "today" : ""}`} key={day}><span>{date}</span>{dayEvents.slice(0, 2).map(e => <small className={`category-${e.category}`} key={e.id} title={`${e.title} · ${formatDate(e.endsAt, zone)}`}>{e.shortTitle}</small>)}</div>; })}</div></div>;
+function HorizontalTimeline({
+  events,
+  zone,
+  lang,
+}: {
+  events: CalendarEvent[];
+  zone: string;
+  lang: Language;
+}) {
+  const t = copy[lang],
+    dayWidth = 58,
+    start = Date.UTC(2026, 7, 17),
+    totalDays = 31,
+    end = start + totalDays * 86400000;
+  const [selectedImage, setSelectedImage] = useState<{
+    src: string;
+    title: string;
+  } | null>(null);
+  useEffect(() => {
+    if (!selectedImage) return;
+    const close = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setSelectedImage(null);
+    };
+    document.addEventListener("keydown", close);
+    document.body.classList.add("lightbox-open");
+    return () => {
+      document.removeEventListener("keydown", close);
+      document.body.classList.remove("lightbox-open");
+    };
+  }, [selectedImage]);
+  const days = Array.from(
+    { length: totalDays },
+    (_, i) => new Date(start + i * 86400000),
+  );
+  const rows = events.filter(
+    (e) => +new Date(e.startsAt) < end && +new Date(e.endsAt) > start,
+  );
+  return (
+    <>
+      <div className="range-timeline">
+        <div className="range-title">
+          <span>{t.month}</span>
+          <small>
+            {lang === "zh"
+              ? "左右滑动查看全部日期"
+              : "Scroll horizontally to see every day"}
+          </small>
+        </div>
+        <div className="range-scroll">
+          <div
+            className="range-board"
+            style={
+              {
+                "--days": totalDays,
+                "--day-width": `${dayWidth}px`,
+              } as React.CSSProperties
+            }
+          >
+            <div className="range-header">
+              <div className="range-label-head">
+                {lang === "zh" ? "活动" : "Event"}
+              </div>
+              <div className="range-days">
+                {days.map((day) => (
+                  <div
+                    className={
+                      day.getUTCDate() === 19 && day.getUTCMonth() === 7
+                        ? "today"
+                        : ""
+                    }
+                    key={day.toISOString()}
+                  >
+                    <b>{day.getUTCDate()}</b>
+                    <span>
+                      {lang === "zh"
+                        ? `${day.getUTCMonth() + 1}月`
+                        : day.toLocaleDateString("en", { weekday: "short" })}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            {rows.map((event) => {
+              const item = localEvent(event, lang),
+                eventStart = Math.max(+new Date(event.startsAt), start),
+                eventEnd = Math.min(+new Date(event.endsAt), end),
+                left = ((eventStart - start) / 86400000) * dayWidth,
+                width = Math.max(
+                  dayWidth * 0.45,
+                  ((eventEnd - eventStart) / 86400000) * dayWidth,
+                );
+              return (
+                <div className="range-row" key={event.id}>
+                  <div className="range-label">
+                    {event.imageUrl ? (
+                      <button
+                        className={`range-thumb category-${event.category}`}
+                        onClick={() =>
+                          setSelectedImage({
+                            src: event.imageUrl!,
+                            title: item.title,
+                          })
+                        }
+                        aria-label={`${lang === "zh" ? "查看图片" : "View image"}: ${item.title}`}
+                      >
+                        <i>{categoryMeta[event.category].icon}</i>
+                        <img
+                          src={event.imageUrl}
+                          alt=""
+                          loading="lazy"
+                          referrerPolicy="no-referrer"
+                          onError={(e) => {
+                            e.currentTarget.style.display = "none";
+                          }}
+                        />
+                      </button>
+                    ) : (
+                      <span
+                        className={`range-thumb category-${event.category}`}
+                      >
+                        <i>{categoryMeta[event.category].icon}</i>
+                      </span>
+                    )}
+                    <a
+                      className="range-source"
+                      href={event.sourceUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      title={t.official}
+                    >
+                      <span
+                        className={`game-badge game-${event.game || "starrail"}`}
+                      >
+                        <img
+                          src={gameMeta[event.game || "starrail"].logoUrl}
+                          alt=""
+                          referrerPolicy="no-referrer"
+                        />
+                        {gameMeta[event.game || "starrail"].short}
+                      </span>
+                      <strong>{item.shortTitle}</strong>
+                      <small>{t.cats[event.category]} ↗</small>
+                    </a>
+                  </div>
+                  <div className="range-track">
+                    <div
+                      className={`range-bar category-${event.category}`}
+                      style={{ left, width }}
+                      title={`${item.title} · ${formatDate(event.startsAt, zone, lang)} — ${formatDate(event.endsAt, zone, lang)}`}
+                    >
+                      <span>
+                        {formatDate(event.startsAt, zone, lang)} →{" "}
+                        {formatDate(event.endsAt, zone, lang)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+      {selectedImage && (
+        <div
+          className="image-lightbox"
+          role="dialog"
+          aria-modal="true"
+          aria-label={selectedImage.title}
+          onClick={() => setSelectedImage(null)}
+        >
+          <div
+            className="lightbox-panel"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              className="lightbox-close"
+              onClick={() => setSelectedImage(null)}
+              aria-label={lang === "zh" ? "关闭图片" : "Close image"}
+            >
+              ×
+            </button>
+            <img
+              src={selectedImage.src}
+              alt={selectedImage.title}
+              referrerPolicy="no-referrer"
+            />
+            <p>{selectedImage.title}</p>
+          </div>
+        </div>
+      )}
+    </>
+  );
 }
