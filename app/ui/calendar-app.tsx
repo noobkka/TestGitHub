@@ -510,13 +510,22 @@ function HorizontalTimeline({
   const t = copy[lang],
     dayWidth = 58,
     current = new Date(now),
-    start = Date.UTC(current.getUTCFullYear(), current.getUTCMonth(), 1),
+    dateParts = new Intl.DateTimeFormat("en-US", {
+      timeZone: zone,
+      year: "numeric",
+      month: "numeric",
+      day: "numeric",
+    }).formatToParts(current),
+    currentYear = Number(dateParts.find((p) => p.type === "year")?.value),
+    currentMonth = Number(dateParts.find((p) => p.type === "month")?.value) - 1,
+    currentDay = Number(dateParts.find((p) => p.type === "day")?.value),
+    start = Date.UTC(currentYear, currentMonth, 1),
     totalDays = 62,
     end = start + totalDays * 86400000;
   const rangeEnd = new Date(end - 86400000),
     rangeLabel = lang === "zh"
-      ? `${current.getUTCMonth() + 1} 月 1 日 — ${rangeEnd.getUTCMonth() + 1} 月 ${rangeEnd.getUTCDate()} 日`
-      : `${current.toLocaleDateString("en", { month: "short" })} 1 — ${rangeEnd.toLocaleDateString("en", { month: "short" })} ${rangeEnd.getUTCDate()}`;
+      ? `${currentMonth + 1} 月 1 日 — ${rangeEnd.getUTCMonth() + 1} 月 ${rangeEnd.getUTCDate()} 日`
+      : `${current.toLocaleDateString("en", { month: "short", timeZone: zone })} 1 — ${rangeEnd.toLocaleDateString("en", { month: "short", timeZone: zone })} ${rangeEnd.getUTCDate()}`;
   const [selectedImage, setSelectedImage] = useState<{
     src: string;
     title: string;
@@ -569,9 +578,9 @@ function HorizontalTimeline({
                 {days.map((day) => (
                   <div
                     className={
-                      day.getUTCDate() === current.getUTCDate() &&
-                      day.getUTCMonth() === current.getUTCMonth() &&
-                      day.getUTCFullYear() === current.getUTCFullYear()
+                      day.getUTCDate() === currentDay &&
+                      day.getUTCMonth() === currentMonth &&
+                      day.getUTCFullYear() === currentYear
                         ? "today"
                         : ""
                     }
