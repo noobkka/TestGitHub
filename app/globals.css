@@ -26,4 +26,4 @@ footer{border-top:1px solid #211f27;padding:30px max(5vw,28px);display:flex;alig
 .range-label strong{font-size:14px}.range-label small{font-size:11px}
 .range-bar span{font-size:12px}
 .range-scroll{overflow-x:auto;overflow-y:clip}
-.range-header{position:sticky;top:0;z-index:5}
+.range-header{position:sticky;top:74px;z-index:5}
