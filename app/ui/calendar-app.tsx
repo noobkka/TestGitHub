@@ -473,7 +473,7 @@ export default function CalendarApp({
             </div>
           </>
         ) : (
-          <HorizontalTimeline events={visible} zone={zone} lang={lang} />
+          <HorizontalTimeline events={visible} zone={zone} lang={lang} now={now} />
         )}
       </section>
       <footer id="about">
@@ -500,16 +500,23 @@ function HorizontalTimeline({
   events,
   zone,
   lang,
+  now,
 }: {
   events: CalendarEvent[];
   zone: string;
   lang: Language;
+  now: number;
 }) {
   const t = copy[lang],
     dayWidth = 58,
-    start = Date.UTC(2026, 7, 17),
-    totalDays = 31,
+    current = new Date(now),
+    start = Date.UTC(current.getUTCFullYear(), current.getUTCMonth(), 1),
+    totalDays = 62,
     end = start + totalDays * 86400000;
+  const rangeEnd = new Date(end - 86400000),
+    rangeLabel = lang === "zh"
+      ? `${current.getUTCMonth() + 1} 月 1 日 — ${rangeEnd.getUTCMonth() + 1} 月 ${rangeEnd.getUTCDate()} 日`
+      : `${current.toLocaleDateString("en", { month: "short" })} 1 — ${rangeEnd.toLocaleDateString("en", { month: "short" })} ${rangeEnd.getUTCDate()}`;
   const [selectedImage, setSelectedImage] = useState<{
     src: string;
     title: string;
@@ -537,7 +544,7 @@ function HorizontalTimeline({
     <>
       <div className="range-timeline">
         <div className="range-title">
-          <span>{t.month}</span>
+          <span>{rangeLabel}</span>
           <small>
             {lang === "zh"
               ? "左右滑动查看全部日期"
@@ -562,7 +569,9 @@ function HorizontalTimeline({
                 {days.map((day) => (
                   <div
                     className={
-                      day.getUTCDate() === 19 && day.getUTCMonth() === 7
+                      day.getUTCDate() === current.getUTCDate() &&
+                      day.getUTCMonth() === current.getUTCMonth() &&
+                      day.getUTCFullYear() === current.getUTCFullYear()
                         ? "today"
                         : ""
                     }
