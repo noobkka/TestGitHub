@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { CalendarEvent, EventCategory, GameId } from "@/data/events";
 import { categoryMeta, gameMeta } from "@/data/events";
 
@@ -530,6 +530,30 @@ function HorizontalTimeline({
     src: string;
     title: string;
   } | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const didInitialScroll = useRef(false);
+  useEffect(() => {
+    if (didInitialScroll.current) return;
+    const timer = window.setTimeout(() => {
+      const actual = new Date();
+      const parts = new Intl.DateTimeFormat("en-US", {
+        timeZone: zone,
+        year: "numeric",
+        month: "numeric",
+        day: "numeric",
+      }).formatToParts(actual);
+      const year = Number(parts.find((p) => p.type === "year")?.value);
+      const month = Number(parts.find((p) => p.type === "month")?.value) - 1;
+      const day = Number(parts.find((p) => p.type === "day")?.value);
+      if (year !== currentYear || month !== currentMonth) return;
+      scrollRef.current?.scrollTo({
+        left: Math.max(0, (day - 1) * dayWidth - 220),
+        behavior: "smooth",
+      });
+      didInitialScroll.current = true;
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [currentMonth, currentYear, dayWidth, zone]);
   useEffect(() => {
     if (!selectedImage) return;
     const close = (event: KeyboardEvent) => {
@@ -560,7 +584,7 @@ function HorizontalTimeline({
               : "Scroll horizontally to see every day"}
           </small>
         </div>
-        <div className="range-scroll">
+        <div className="range-scroll" ref={scrollRef}>
           <div
             className="range-board"
             style={
