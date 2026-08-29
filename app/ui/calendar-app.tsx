@@ -546,12 +546,10 @@ function HorizontalTimeline({
       const month = Number(parts.find((p) => p.type === "month")?.value) - 1;
       const day = Number(parts.find((p) => p.type === "day")?.value);
       if (year !== currentYear || month !== currentMonth) return;
-      scrollRef.current?.scrollTo({
-        left: Math.max(0, (day - 1) * dayWidth - 220),
-        behavior: "smooth",
-      });
+      const todayCell = scrollRef.current?.querySelector<HTMLElement>("[data-today]");
+      todayCell?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
       didInitialScroll.current = true;
-    }, 0);
+    }, 150);
     return () => window.clearTimeout(timer);
   }, [currentMonth, currentYear, dayWidth, zone]);
   useEffect(() => {
@@ -607,6 +605,13 @@ function HorizontalTimeline({
                       day.getUTCFullYear() === currentYear
                         ? "today"
                         : ""
+                    }
+                    data-today={
+                      day.getUTCDate() === currentDay &&
+                      day.getUTCMonth() === currentMonth &&
+                      day.getUTCFullYear() === currentYear
+                        ? "true"
+                        : undefined
                     }
                     key={day.toISOString()}
                   >
